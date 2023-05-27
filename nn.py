@@ -1,58 +1,93 @@
-import csv
+from typing import Callable
+
 import numpy as np
 
-seed = 0
+class Layer(object):
+    def __init__(self) -> None:
+        self.input = None
+        self.output = None
+
+    def forward_propagation(self, data: np.array) -> np.array:
+        raise NotImplementedError
+
+    def back_propagation(self, output_error: np.array, alpha: float) -> np.array:
+        raise NotImplementedError
+
+class FullyConnectedLayer(Layer):
+    def __init__(self, input_size: int, output_size: int) -> None:
+        self.weights = np.random.random((input_size, output_size))
+        self.bias = np.random.random((1, output_size))
+
+    def forward_propagation(self, data: np.array) -> np.array:
+        self.input = data
+        self.output = self.input @ self.weights + self.bias
+
+        return self.output 
+
+    def back_propagation(self, output_error: np.array, alpha: float) -> np.array:
+        input_error = output_error @ self.weights.T
+        weights_error = np.matrix(self.input).T @ output_error
+        bias_error = output_error
+
+        self.bias -= alpha * bias_error 
+        self.weights -= alpha * weights_error
+
+        return input_error 
+
+class ActiviationLayer(Layer):
+    def __init__(self, activation: Callable, activation_prime: Callable) -> None:
+        self.activation = activation
+        self.activation_prime = activation_prime
+
+    def forward_propagation(self, data: np.array) -> np.array:
+        self.input = data
+        self.output = self.activation(self.input)
+
+        return self.output 
+
+    def back_propagation(self, output_error: np.array, alpha: float) -> np.array:
+        return output_error * self.activation_prime(self.input)
 
 class NeuralNetwork(object):
-    # TODO: Fix naming of weights -> input layer weights -> hidden layer weights and hidden layer weights -> output layer weights
     def __init__(self) -> None:
         # user must define NN architecture
         # user must define cost function -> MSE, Cross entropy, ...
         # user must define optimizer -> Adam, SGD, ...
         # initially support Cross-entropy + SGD -> classification problems only
+        self.layer = [] 
+        self.cost = None
+        self.cost_prime = None
 
-        np.random.seed(seed)
+    def add(self, layer: Layer) -> None:
+        self.layer.append(layer)
 
-        # Input: 7 neurons
-        self._input_layer = np.random.random((5, 7))
-        # Hidden: 5 neurons -> sigmoid
-        self._hidden_layer = np.random.random((3, 5)) 
-        # Output: 3 neurons -> softmax
+    def use(self, cost: Callable, cost_prime: Callable) -> None:
+        self.cost = cost
+        self.cost_prime = cost_prime
 
-        # intermediate layer outputs for back propagation
-        self._layer_1 = None
-        self._layer_2 = None
+    def train(self, train_inputs: np.array, train_outputs: np.array, ephocs: int, learning_rate: float) -> None:
+        samples = train_inputs.shape[0]
+        for ephoc in range(ephocs):
+            cost = 0
+            for i, _input in enumerate(train_inputs):
+                # forward propagate 
+                output = _input
+                for layer in self.layer:
+                    output = layer.forward_propagation(output)
 
-    def train(self, path: str, learning_rate: float) -> None:
-        # loading data
-        # loop below until cost function is minimised/maximised:
-        #   forward propagating
-        #   backward propogating
-        guess = self._forward_propogate(np.random.random(7))
-        self._back_propogate(guess, np.array([1, 0, 0]), learning_rate)
+                # for visual purposes only
+                cost += self.cost(output, train_outputs[i])
 
-    def _forward_propogate(self, data: np.array) -> np.array:
-        assert data.shape[0] == self._input_layer.shape[1], "input data size does not match input layer size"
+                # calculate cost function 
+                error = self.cost_prime(output, train_outputs[i]) 
 
-        # output of input layer
-        layer_1 = self._input_layer @ data
-        # output of hidden layer
-        layer_2 = self._sigmoid(self._hidden_layer @ layer_1)
-        # output of output layer
-        output = self._softmax(layer_2)
+                # back propagate
+                for layer in reversed(self.layer):
+                    error = layer.back_propagation(error, learning_rate)
 
-        return output
-
-    def _back_propogate(self, guess: np.array, actual: np.array, alpha: float) -> None:
-        cost = self._cross_entropy(guess, actual)
-
-        # update hidden layer weights
-        output_gradient = np.matrix(guess - actual)
-        self._hidden_layer -= alpha * np.transpose(output_gradient) 
-
-        # TODO: update input layer weights
-        hidden_gradient = ... 
-        self._input_layer -= alpha * ...
+            # calculate average cost across all samples
+            cost /= samples
+            print(f"{ephoc=}  {cost=}")
 
     def _sigmoid(self, data: np.array) -> np.array:
         return 1 / (1 + np.exp(-data))
@@ -69,10 +104,57 @@ class NeuralNetwork(object):
     def _load_csv(self, path: str) -> np.array:
         pass
 
+# activiation functions --------------------------
+
+def sigmoid(data: np.array) -> np.array:
+    return 1 / (1 + np.exp(-data))
+
+def sigmoid_prime(data: np.array) -> np.array:
+    return sigmoid(data) * (1 - sigmoid(data))
+
+def softmax(data: np.array) -> np.array:
+    return np.exp(data) / (np.sum(np.exp(data)))
+
+def softmax_prime(data: np.array) -> np.array: # TODO: this outputs a matrix instead of a vector -> will this work?
+    data = data.reshape(-1, 1)
+    return np.diagflat(data) - data @ data.T
+
+def tanh(data: np.array) -> np.array:
+    return np.tanh(data)
+
+def tanh_prime(data: np.array) -> np.array:
+    return 1 - np.square(np.tanh(data))
+
+# cost functions --------------------------------
+
+def mse(guess: np.array, actual: np.array) -> np.array:
+    return np.square(actual - guess).mean()
+
+def mse_prime(guess: np.array, actual: np.array) -> np.array:
+    return 2 * (guess - actual) / actual.size
+
+def cross_entropy(guess: np.array, actual: np.array) -> np.array:
+    return -np.sum(actual * np.log(guess))
+
+def cross_entropy_prime(guess: np.array, actual: np.array) -> np.array:
+    return -actual / guess
+
 if __name__ == "__main__":
-    test_data_path = f""
-    train_data_path = f""
+    seed = 0
+    np.random.seed(seed)
 
     nn = NeuralNetwork()
-    nn.train(train_data_path, 0.1)
-    # nn.predict(test_data_path)
+    nn.add(FullyConnectedLayer(2, 3))
+    nn.add(ActiviationLayer(tanh, tanh_prime))
+    nn.add(FullyConnectedLayer(3, 1))
+    nn.add(ActiviationLayer(tanh, tanh_prime))
+    
+    # train
+    # training data
+    # input_train = np.array([[0,0], [0,1], [1,0], [1,1]])
+    # output_train = np.array([[0], [1], [1], [0]])
+    input_train = np.array([[[0,0]], [[0,1]], [[1,0]], [[1,1]]])
+    output_train = np.array([[[0]], [[1]], [[1]], [[0]]])
+
+    nn.use(mse, mse_prime)
+    nn.train(input_train, output_train, ephocs=1000, learning_rate=0.1)
