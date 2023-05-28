@@ -54,12 +54,12 @@ class NeuralNetwork(object):
         # user must define cost function -> MSE, Cross entropy, ...
         # user must define optimizer -> Adam, SGD, ...
         # initially support Cross-entropy + SGD -> classification problems only
-        self.layer = [] 
+        self.layers = [] 
         self.cost = None
         self.cost_prime = None
 
     def add(self, layer: Layer) -> None:
-        self.layer.append(layer)
+        self.layers.append(layer)
 
     def use(self, cost: Callable, cost_prime: Callable) -> None:
         self.cost = cost
@@ -72,7 +72,7 @@ class NeuralNetwork(object):
             for i, _input in enumerate(train_inputs):
                 # forward propagate 
                 output = _input
-                for layer in self.layer:
+                for layer in self.layers:
                     output = layer.forward_propagation(output)
 
                 # for visual purposes only
@@ -82,27 +82,19 @@ class NeuralNetwork(object):
                 error = self.cost_prime(output, train_outputs[i]) 
 
                 # back propagate
-                for layer in reversed(self.layer):
+                for layer in reversed(self.layers):
                     error = layer.back_propagation(error, learning_rate)
 
             # calculate average cost across all samples
             cost /= samples
             print(f"{ephoc=}  {cost=}")
 
-    def _sigmoid(self, data: np.array) -> np.array:
-        return 1 / (1 + np.exp(-data))
+    def predict(self, data: np.array) -> np.array:
+        output = data 
+        for layer in self.layers:
+            output = layer.forward_propagation(output)
 
-    def _softmax(self, data: np.array) -> np.array:
-        return np.exp(data) / np.sum(np.exp(data))
-
-    def _cross_entropy(self, guess: np.array, actual: np.array) -> np.array:
-        return -np.sum(actual * np.log(guess))
-    
-    def _mse(self, guess: np.array, actual: np.array) -> np.array:
-        return np.square(actual - guess).mean()
-
-    def _load_csv(self, path: str) -> np.array:
-        pass
+        return output
 
 # activiation functions --------------------------
 
@@ -151,10 +143,12 @@ if __name__ == "__main__":
     
     # train
     # training data
-    # input_train = np.array([[0,0], [0,1], [1,0], [1,1]])
-    # output_train = np.array([[0], [1], [1], [0]])
-    input_train = np.array([[[0,0]], [[0,1]], [[1,0]], [[1,1]]])
-    output_train = np.array([[[0]], [[1]], [[1]], [[0]]])
+    input_train = np.array([[0,0], [0,1], [1,0], [1,1]])
+    output_train = np.array([[0], [1], [1], [0]])
 
     nn.use(mse, mse_prime)
     nn.train(input_train, output_train, ephocs=1000, learning_rate=0.1)
+
+    # predict
+    guess = nn.predict(np.array([1, 0]))
+    print(guess)
